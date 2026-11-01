@@ -1,0 +1,930 @@
+<!DOCTYPE html>
+<html lang="ms">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ROBO-MELODY: Misi Lagu Pusingan</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;800;900&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- MediaPipe Scripts via CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        cyber: {
+                            dark: '#0a0d18',
+                            panel: '#121829',
+                            border: '#00f0ff',
+                            purple: '#7000ff',
+                            pink: '#ff007f',
+                            yellow: '#ffe600',
+                            glow: 'rgba(0, 240, 255, 0.4)'
+                        }
+                    },
+                    fontFamily: {
+                        orbitron: ['Orbitron', 'sans-serif'],
+                        rajdhani: ['Rajdhani', 'sans-serif']
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        html, body {
+            background-color: #05070e;
+            color: #ffffff;
+            font-family: 'Rajdhani', sans-serif;
+            overflow-x: hidden;
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+        }
+
+        .font-orbitron { font-family: 'Orbitron', sans-serif; }
+
+        /* Neon Glow Effects */
+        .glow-cyan {
+            box-shadow: 0 0 15px rgba(0, 240, 255, 0.5), inset 0 0 15px rgba(0, 240, 255, 0.2);
+            border: 1px solid #00f0ff;
+        }
+        .glow-purple {
+            box-shadow: 0 0 15px rgba(112, 0, 255, 0.5), inset 0 0 15px rgba(112, 0, 255, 0.2);
+            border: 1px solid #7000ff;
+        }
+        .text-glow {
+            text-shadow: 0 0 10px #00f0ff, 0 0 20px #00f0ff;
+        }
+        
+        /* Grid scanline background */
+        .cyber-grid {
+            background-size: 40px 40px;
+            background-image: 
+                linear-gradient(to right, rgba(0, 240, 255, 0.05) 1px, transparent 1px),
+                linear-gradient(to bottom, rgba(0, 240, 255, 0.05) 1px, transparent 1px);
+        }
+
+        /* Virtual Hand Cursor Overlay */
+        #virtual-cursor {
+            position: fixed;
+            pointer-events: none;
+            z-index: 9999;
+            transform: translate(-50%, -50%);
+            transition: width 0.15s, height 0.15s, border-color 0.15s;
+        }
+
+        /* Progress ring animations */
+        .progress-ring-circle {
+            transition: stroke-dashoffset 0.1s linear;
+            transform: rotate(-90deg);
+            transform-origin: 50% 50%;
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0a0d18;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #00f0ff;
+            border-radius: 3px;
+        }
+    </style>
+</head>
+<body class="cyber-grid min-h-screen flex flex-col justify-between selection:bg-cyan-500 selection:text-black p-2 sm:p-4">
+
+    <!-- Virtual Hand Pointer Cursor Overlay -->
+    <div id="virtual-cursor" class="hidden w-10 h-10 rounded-full border-2 border-cyan-400 bg-cyan-400/30 flex items-center justify-center">
+        <div class="w-2.5 h-2.5 rounded-full bg-yellow-400 animate-ping"></div>
+        <svg id="cursor-progress-svg" class="absolute inset-0 w-full h-full" viewBox="0 0 40 40">
+            <circle class="progress-ring-circle" stroke="#ff007f" stroke-width="4" fill="transparent" r="16" cx="20" cy="20" stroke-dasharray="100.53" stroke-dashoffset="100.53" />
+        </svg>
+    </div>
+
+    <!-- Header / HUD -->
+    <header class="border border-cyan-900/60 bg-slate-950/90 backdrop-blur-md rounded-2xl p-3 mb-4 shadow-xl">
+        <div class="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-3">
+            <!-- Brand & Mascot Logo -->
+            <div class="flex items-center space-x-3">
+                <div class="relative w-11 h-11 rounded-xl bg-cyan-950/80 border border-cyan-400 flex items-center justify-center glow-cyan">
+                    <i class="fa-solid fa-robot text-xl text-cyan-400"></i>
+                    <span class="absolute -top-1 -right-1 flex h-3 w-3">
+                        <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75"></span>
+                        <span class="relative inline-flex rounded-full h-3 w-3 bg-cyan-500"></span>
+                    </span>
+                </div>
+                <div>
+                    <h1 class="font-orbitron text-lg sm:text-xl font-black tracking-wider text-cyan-400 text-glow">ROBO-MELODY</h1>
+                    <p class="text-[10px] sm:text-xs text-cyan-300/80 font-semibold tracking-widest uppercase">PENDIDIKAN MUZIK (2.1.1 NYANYIAN LAGU PUSINGAN)</p>
+                </div>
+            </div>
+
+            <!-- Stats HUD Bar -->
+            <div class="flex items-center gap-3 sm:gap-6 bg-slate-900/90 border border-slate-800 px-3 py-1.5 rounded-xl">
+                <!-- Score -->
+                <div class="text-center">
+                    <div class="text-[9px] text-gray-400 uppercase font-orbitron">SKOR</div>
+                    <div id="score-display" class="font-orbitron text-lg font-bold text-yellow-400">000</div>
+                </div>
+                <div class="w-px h-7 bg-slate-800"></div>
+                <!-- Progress Question -->
+                <div class="text-center">
+                    <div class="text-[9px] text-gray-400 uppercase font-orbitron">SOALAN</div>
+                    <div id="question-count" class="font-orbitron text-lg font-bold text-cyan-400">1/10</div>
+                </div>
+                <div class="w-px h-7 bg-slate-800"></div>
+                <!-- Energy / Health -->
+                <div class="flex flex-col items-center">
+                    <div class="text-[9px] text-gray-400 uppercase font-orbitron mb-0.5">CYBER LIFE</div>
+                    <div class="flex gap-1" id="health-bar">
+                        <i class="fa-solid fa-bolt text-xs text-yellow-400"></i>
+                        <i class="fa-solid fa-bolt text-xs text-yellow-400"></i>
+                        <i class="fa-solid fa-bolt text-xs text-yellow-400"></i>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Settings / Controls Header -->
+            <div class="flex items-center gap-2">
+                <button id="toggle-cam-btn" onclick="toggleWebcam()" class="px-3 py-2 rounded-lg bg-cyan-950 hover:bg-cyan-900 border border-cyan-500/50 text-cyan-300 text-xs font-orbitron flex items-center gap-2 transition hover:scale-105">
+                    <i class="fa-solid fa-video"></i>
+                    <span id="cam-btn-text">Buka Webcam</span>
+                </button>
+                <button onclick="toggleAudio()" id="audio-btn" class="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-cyan-400 border border-slate-700">
+                    <i class="fa-solid fa-volume-high"></i>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- MAIN GAME AREA -->
+    <main class="max-w-7xl mx-auto w-full flex-1 flex flex-col lg:flex-row gap-5 items-start justify-center">
+
+        <!-- LEFT PANEL: Visualizer & Webcam Feed & Mascot -->
+        <div class="w-full lg:w-4/12 flex flex-col gap-4">
+            
+            <!-- Webcam & MediaPipe View Box -->
+            <div class="relative bg-slate-950/90 rounded-2xl overflow-hidden border border-cyan-500/40 glow-purple flex flex-col items-center justify-center min-h-[220px] sm:min-h-[260px] shadow-2xl">
+                <!-- Video Element (Hidden raw webcam feed) -->
+                <video id="webcam-video" class="hidden" playsinline></video>
+
+                <!-- MediaPipe Canvas Overlay -->
+                <canvas id="output-canvas" class="w-full h-full object-cover rounded-2xl transform -scale-x-100"></canvas>
+
+                <!-- Fallback Info when Cam is off -->
+                <div id="cam-placeholder" class="absolute inset-0 flex flex-col items-center justify-center p-5 text-center bg-slate-950/95">
+                    <i class="fa-solid fa-hand-pointer text-4xl text-cyan-400/50 mb-3 animate-bounce"></i>
+                    <p class="text-sm text-cyan-300 font-semibold mb-1">Kawalan Isyarat Tangan (Webcam)</p>
+                    <p class="text-xs text-gray-400 max-w-xs mb-3">Tekan butang untuk mengaktifkan webcam. Pilihlah jawapan guna isyarat jari (1-4) atau gerakkan tapak tangan!</p>
+                    <button onclick="startWebcam()" class="px-4 py-2 bg-gradient-to-r from-cyan-400 to-blue-600 font-orbitron text-xs font-bold text-black rounded-xl hover:brightness-125 transition shadow-lg">
+                        <i class="fa-solid fa-power-off mr-1"></i> AKTIFKAN WEBCAM
+                    </button>
+                </div>
+
+                <!-- Camera Status Badge -->
+                <div class="absolute top-3 left-3 bg-slate-900/80 backdrop-blur-md px-2.5 py-1 rounded-full border border-cyan-500/40 text-[10px] font-orbitron text-cyan-300 flex items-center gap-1.5">
+                    <span id="cam-indicator" class="w-2 h-2 rounded-full bg-red-500"></span>
+                    <span id="cam-status-text">MOD MANUAL</span>
+                </div>
+
+                <!-- Detected Gesture Overlay Box -->
+                <div id="gesture-badge" class="absolute bottom-3 right-3 bg-cyan-950/90 border border-cyan-400 text-cyan-300 px-3 py-1 rounded-lg font-orbitron text-[11px] shadow-lg hidden">
+                    FINGERS DETECTED: <span id="detected-count" class="text-yellow-400 font-bold text-sm">0</span>
+                </div>
+            </div>
+
+            <!-- ROBO-MELODY Mascot Dialogue Box -->
+            <div class="bg-slate-900/90 rounded-2xl border border-cyan-800/80 p-4 relative flex items-start gap-3 shadow-xl">
+                <div class="w-14 h-14 rounded-xl bg-gradient-to-br from-cyan-500 to-purple-600 flex-shrink-0 flex items-center justify-center text-3xl shadow-lg border border-white/20">
+                    🤖
+                </div>
+                <div class="flex-1">
+                    <div class="flex items-center justify-between mb-1">
+                        <h4 class="font-orbitron text-xs font-bold text-cyan-400">ROBO-MELODY AI</h4>
+                        <span class="text-[9px] text-purple-400 font-mono">LAB ONLINE</span>
+                    </div>
+                    <p id="mascot-dialogue" class="text-xs text-gray-200 leading-relaxed font-semibold">
+                        "Selamat datang! Sila jawab soalan mengenai topik Menyanyikan Lagu Pusingan. Gunakan webcam atau sentuh butang jawapan di sebelah!"
+                    </p>
+                </div>
+            </div>
+
+            <!-- Dynamic Audio Spectrum Visualizer (HTML Canvas) -->
+            <div class="bg-slate-950/90 border border-slate-800 rounded-xl p-3 flex flex-col gap-2">
+                <div class="flex justify-between items-center text-[10px] font-orbitron text-cyan-400/80">
+                    <span>SPEKTRUM HARMONI MUZIK</span>
+                    <span id="tempo-bpm" class="text-yellow-400">TEMPO: 100 BPM</span>
+                </div>
+                <canvas id="visualizer-canvas" class="w-full h-10 rounded-lg bg-slate-900/70 border border-slate-800/80"></canvas>
+            </div>
+        </div>
+
+        <!-- RIGHT PANEL: Question & Answer Controls Area -->
+        <div class="w-full lg:w-8/12 flex flex-col gap-4">
+
+            <!-- Question Card Header -->
+            <div class="bg-slate-900/90 border border-cyan-500/40 rounded-2xl p-5 sm:p-6 relative overflow-hidden shadow-2xl">
+                <div class="absolute top-0 right-0 w-32 h-32 bg-cyan-500/5 rounded-full blur-2xl pointer-events-none"></div>
+                
+                <div class="flex items-center justify-between gap-2 mb-3">
+                    <span class="px-3 py-1 rounded-full bg-cyan-950 border border-cyan-500/30 text-cyan-400 text-xs font-orbitron tracking-wider">
+                        SUBTOPIK 2.1.1: NYANYIAN LAGU PUSINGAN
+                    </span>
+                    <span id="category-badge" class="text-xs font-orbitron text-purple-400 font-semibold">
+                        MODUL KEMAHIRAN MUZIK
+                    </span>
+                </div>
+
+                <!-- Main Question Text -->
+                <h2 id="question-text" class="text-base sm:text-lg font-bold text-white leading-relaxed font-rajdhani min-h-[50px] flex items-center">
+                    Memuatkan soalan muzik...
+                </h2>
+            </div>
+
+            <!-- Gesture Quick Helper Guide -->
+            <div class="grid grid-cols-4 gap-2 text-center text-xs font-orbitron">
+                <div class="bg-slate-950 border border-cyan-900/60 p-2 rounded-xl">
+                    <div class="text-cyan-400 font-bold">☝️ 1 Jari</div>
+                    <div class="text-[10px] text-gray-400">Pilihan A</div>
+                </div>
+                <div class="bg-slate-950 border border-cyan-900/60 p-2 rounded-xl">
+                    <div class="text-cyan-400 font-bold">✌️ 2 Jari</div>
+                    <div class="text-[10px] text-gray-400">Pilihan B</div>
+                </div>
+                <div class="bg-slate-950 border border-cyan-900/60 p-2 rounded-xl">
+                    <div class="text-cyan-400 font-bold">🤟 3 Jari</div>
+                    <div class="text-[10px] text-gray-400">Pilihan C</div>
+                </div>
+                <div class="bg-slate-950 border border-cyan-900/60 p-2 rounded-xl">
+                    <div class="text-cyan-400 font-bold">🖖 4 Jari</div>
+                    <div class="text-[10px] text-gray-400">Pilihan D</div>
+                </div>
+            </div>
+
+            <!-- Options Grid (4 Multiple Choice Options) -->
+            <div id="options-container" class="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+                <!-- Option Buttons rendered dynamically -->
+            </div>
+
+            <!-- Feedback Alert Banner -->
+            <div id="feedback-banner" class="hidden p-4 rounded-xl border font-orbitron text-xs sm:text-sm flex flex-col sm:flex-row items-center justify-between gap-3 transition-all duration-300">
+                <div class="flex items-center gap-3">
+                    <i id="feedback-icon" class="text-2xl"></i>
+                    <span id="feedback-text" class="font-bold"></span>
+                </div>
+                <button id="next-btn" onclick="nextQuestion()" class="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-cyan-400 text-slate-950 font-black hover:bg-cyan-300 transition shadow-lg flex items-center justify-center gap-2">
+                    SOALAN SETERUSNYA <i class="fa-solid fa-arrow-right"></i>
+                </button>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- GAME OVER / VICTORY MODAL OVERLAY -->
+    <div id="game-over-modal" class="fixed inset-0 bg-slate-950/90 backdrop-blur-xl z-50 hidden flex items-center justify-center p-4">
+        <div class="max-w-md w-full bg-slate-900 border-2 border-cyan-400 rounded-3xl p-6 sm:p-8 text-center glow-cyan relative overflow-hidden">
+            <div class="text-6xl mb-3" id="modal-emoji">🏆</div>
+            <h2 id="modal-title" class="font-orbitron text-xl sm:text-2xl font-black text-cyan-400 text-glow mb-2">MISI SELESAI!</h2>
+            <p id="modal-subtitle" class="text-xs sm:text-sm text-gray-300 mb-5">Analisis Prestasi Nyanyian Lagu Pusingan Selesai.</p>
+            
+            <div class="bg-slate-950 border border-cyan-900/80 rounded-2xl p-4 mb-5 grid grid-cols-2 gap-4 font-orbitron">
+                <div class="text-center">
+                    <div class="text-[10px] text-gray-400">SKOR AKHIR</div>
+                    <div id="modal-score" class="text-2xl sm:text-3xl font-extrabold text-yellow-400">000</div>
+                </div>
+                <div class="text-center">
+                    <div class="text-[10px] text-gray-400">KETEPATAN</div>
+                    <div id="modal-accuracy" class="text-2xl sm:text-3xl font-extrabold text-cyan-400">0%</div>
+                </div>
+            </div>
+
+            <button onclick="restartGame()" class="w-full py-3 rounded-xl bg-gradient-to-r from-cyan-400 to-purple-600 text-black font-orbitron font-extrabold text-xs sm:text-sm tracking-wider hover:brightness-125 transition shadow-lg">
+                <i class="fa-solid fa-rotate-right mr-2"></i> MAIN SEMULA
+            </button>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="mt-4 border-t border-slate-900 bg-slate-950/80 py-3 text-center text-[10px] sm:text-xs text-gray-500 font-orbitron">
+        PROJEK INOVASI PENDIDIKAN MUZIK &bull; SUBTOPIK 2.1.1 NYANYIAN LAGU PUSINGAN
+    </footer>
+
+    <!-- JAVASCRIPT LOGIC -->
+    <script>
+        /* ------------------------------------------------------------------
+           1. QUESTION BANK DATA (Subtopic 2.1.1 Menyanyikan Lagu Pusingan)
+        ------------------------------------------------------------------ */
+        const questions = [
+            {
+                q: "Apakah yang dimaksudkan dengan 'lagu pusingan'?",
+                options: [
+                    "Lagu yang dinyanyikan secara berperingkat / berganti-ganti",
+                    "Lagu yang dinyanyikan sambil memusingkan badan",
+                    "Lagu yang dinyanyikan tanpa henti sepanjang hari",
+                    "Lagu yang dinyanyikan dengan tempo amat cepat"
+                ],
+                correct: 0,
+                hint: "Lagu pusingan (round song) dinyanyikan oleh kumpulan berbeza yang masuk pada frasa yang ditetapkan!"
+            },
+            {
+                q: "Apakah aspek utama yang perlu dijaga apabila menyanyikan lagu pusingan dalam kumpulan?",
+                options: [
+                    "Kelajuan vokal individu sahaja",
+                    "Pendengaran yang fokus dan kestabilan tempo",
+                    "Menyanyi dengan nada paling nyaring",
+                    "Menari mengikut irama muzik"
+                ],
+                correct: 1,
+                hint: "Fokus mendengar kumpulan lain dan menjaga tempo mengelakkan nyanyian kucar-kacir."
+            },
+            {
+                q: "Bilakah kumpulan kedua mula menyanyi dalam persembahan lagu pusingan?",
+                options: [
+                    "Serentak dengan kumpulan pertama",
+                    "Selepas kumpulan pertama selesai keseluruhan lagu",
+                    "Apabila kumpulan pertama mencapai frasa tertentu yang ditetapkan",
+                    "Selepas muzik latar berhenti berbunyi"
+                ],
+                correct: 2,
+                hint: "Kumpulan kedua akan masuk selepas frasa pertama selesai dinyanyikan oleh kumpulan awal."
+            },
+            {
+                q: "Apakah tujuan utama latihan pernafasan sebelum menyanyikan lagu pusingan?",
+                options: [
+                    "Untuk menguatkan otot kaki penyanyi",
+                    "Untuk mengawal pengeluaran udara dan kestabilan vokal",
+                    "Untuk tidur lebih lena",
+                    "Untuk mempercepatkan tempo lagu"
+                ],
+                correct: 1,
+                hint: "Kawalan pernafasan yang baik menghasilkan sebutan dan pic yang stabil."
+            },
+            {
+                q: "Manakah antara berikut BUKAN teknik asas semasa menyanyikan lagu pusingan?",
+                options: [
+                    "Menjaga pic yang betul",
+                    "Mengekalkan tempo seragam",
+                    "Menjerit sesuka hati mengikut perasaan",
+                    "Mendengar nyanyian kumpulan lain"
+                ],
+                correct: 2,
+                hint: "Menjerit akan merosakkan harmoni dan pic lagu!"
+            },
+            {
+                q: "Mengapakah kestabilan tempo sangat penting dalam lagu pusingan?",
+                options: [
+                    "Supaya lagu cepat habis",
+                    "Supaya harmoni dan persilangan muzik antara kumpulan bertaut dengan betul",
+                    "Supaya penyanyi tidak berasa letih",
+                    "Supaya melodi bertukar menjadi muzik rap"
+                ],
+                correct: 1,
+                hint: "Tempo yang seragam memastikan perlapisan melodi bertaut secara harmoni."
+            },
+            {
+                q: "Apakah cabaran utama bagi penyanyi dalam kumpulan lagu pusingan?",
+                options: [
+                    "Menghafal lirik lagu lain",
+                    "Tidak terpengaruh dengan melodi/frasa kumpulan lain yang sedang menyanyi",
+                    "Menari mengikut langkah khas",
+                    "Memegang mikrofon dengan ketat"
+                ],
+                correct: 1,
+                hint: "Penyanyi perlu kekal fokus pada melodi kumpulan sendiri walaupun mendengar melodi berbeza!"
+            },
+            {
+                q: "Apakah kesan jika satu kumpulan mempercepatkan tempo semasa menyanyikan lagu pusingan?",
+                options: [
+                    "Lagu menjadi lebih merdu",
+                    "Keseimbangan harmoni lagu pusingan akan terganggu",
+                    "Kumpulan lain akan menyanyi lebih lancar",
+                    "Tiada apa-apa kesan berlaku"
+                ],
+                correct: 1,
+                hint: "Jika tempo lari, persilangan melodi tidak lagi sejajar dan bunyinya sumbang."
+            },
+            {
+                q: "Latihan sebutan huruf vokal (A, E, I, O, U) yang jelas membantu murid dalam...",
+                options: [
+                    "Menyebut lirik lagu pusingan dengan artikulasi yang tepat dan jelas",
+                    "Memainkan alat muzik perkusi",
+                    "Mengira bilangan frasa lagu",
+                    "Melompat mengikut irama"
+                ],
+                correct: 0,
+                hint: "Artikulasi vokal penting supaya lirik difahami walau dinyanyikan berlapik."
+            },
+            {
+                q: "Struktur lagu pusingan menghasilkan gabungan bunyi yang dipanggil...",
+                options: [
+                    "Monofoni",
+                    "Harmoni (Polifoni mudah)",
+                    "Kakofoni",
+                    "Solo"
+                ],
+                correct: 1,
+                hint: "Nyanyian berlainan lapisan menghasilkan lapisan harmoni polifoni yang indah."
+            }
+        ];
+
+        /* ------------------------------------------------------------------
+           2. GAME STATE VARIABLES
+        ------------------------------------------------------------------ */
+        let currentQuestionIdx = 0;
+        let score = 0;
+        let health = 3;
+        let answered = false;
+        let audioEnabled = true;
+
+        // Hover Gesture Timer Variables
+        let hoveredOptionIdx = -1;
+        let hoverStartTime = 0;
+        const HOVER_DURATION = 1400; // 1.4s hover to trigger answer
+
+        // MediaPipe & Camera Variables
+        let handsDetector = null;
+        let cameraStream = null;
+        let webcamActive = false;
+        let lastGestureDetectTime = 0;
+
+        /* ------------------------------------------------------------------
+           3. AUDIO SYNTHESIZER (Web Audio API)
+        ------------------------------------------------------------------ */
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        let audioCtx = null;
+
+        function initAudio() {
+            if (!audioCtx) {
+                audioCtx = new AudioCtx();
+            }
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+        }
+
+        function playSound(type) {
+            if (!audioEnabled) return;
+            initAudio();
+            
+            const now = audioCtx.currentTime;
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+
+            if (type === 'correct') {
+                // Cyber Arpeggio Tone
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(523.25, now); // C5
+                osc.frequency.exponentialRampToValueAtTime(1046.50, now + 0.2); // C6
+                gain.gain.setValueAtTime(0.3, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
+                osc.start(now);
+                osc.stop(now + 0.3);
+            } else if (type === 'wrong') {
+                // Low Buzz Error
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(180, now);
+                osc.frequency.linearRampToValueAtTime(100, now + 0.3);
+                gain.gain.setValueAtTime(0.3, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
+                osc.start(now);
+                osc.stop(now + 0.3);
+            } else if (type === 'hover') {
+                // Blip
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(650, now);
+                gain.gain.setValueAtTime(0.04, now);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
+                osc.start(now);
+                osc.stop(now + 0.05);
+            } else if (type === 'victory') {
+                // Robot Victory Fanfare
+                const notes = [523.25, 659.25, 783.99, 1046.50];
+                notes.forEach((freq, idx) => {
+                    const noteOsc = audioCtx.createOscillator();
+                    const noteGain = audioCtx.createGain();
+                    noteOsc.connect(noteGain);
+                    noteOsc.connect(audioCtx.destination);
+                    noteOsc.type = 'triangle';
+                    noteOsc.frequency.value = freq;
+                    noteGain.gain.setValueAtTime(0.25, now + idx * 0.1);
+                    noteGain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.1 + 0.3);
+                    noteOsc.start(now + idx * 0.1);
+                    noteOsc.stop(now + idx * 0.1 + 0.3);
+                });
+            }
+        }
+
+        function toggleAudio() {
+            audioEnabled = !audioEnabled;
+            const btn = document.getElementById('audio-btn');
+            btn.innerHTML = audioEnabled ? '<i class="fa-solid fa-volume-high"></i>' : '<i class="fa-solid fa-volume-xmark text-red-400"></i>';
+        }
+
+        /* ------------------------------------------------------------------
+           4. VISUALIZER ANIMATION CANVAS
+        ------------------------------------------------------------------ */
+        function initVisualizer() {
+            const canvas = document.getElementById('visualizer-canvas');
+            const ctx = canvas.getContext('2d');
+            let phase = 0;
+
+            function draw() {
+                if (!canvas.parentElement) return;
+                canvas.width = canvas.parentElement.clientWidth;
+                canvas.height = canvas.parentElement.clientHeight;
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+                const bars = 24;
+                const barWidth = canvas.width / bars;
+
+                for (let i = 0; i < bars; i++) {
+                    const height = Math.sin(phase + i * 0.4) * (canvas.height / 2.5) + (canvas.height / 2);
+                    const gradient = ctx.createLinearGradient(0, canvas.height, 0, 0);
+                    gradient.addColorStop(0, '#00f0ff');
+                    gradient.addColorStop(1, '#7000ff');
+
+                    ctx.fillStyle = gradient;
+                    ctx.fillRect(i * barWidth + 2, canvas.height - height, barWidth - 4, height);
+                }
+                phase += 0.08;
+                requestAnimationFrame(draw);
+            }
+            draw();
+        }
+
+        /* ------------------------------------------------------------------
+           5. GAME LOGIC & RENDERING
+        ------------------------------------------------------------------ */
+        function loadQuestion() {
+            answered = false;
+            const qData = questions[currentQuestionIdx];
+            
+            // Update HUD
+            document.getElementById('question-count').innerText = `${currentQuestionIdx + 1}/${questions.length}`;
+            document.getElementById('question-text').innerText = qData.q;
+            document.getElementById('mascot-dialogue').innerText = `"${qData.hint}"`;
+
+            // Reset Feedback Banner
+            const banner = document.getElementById('feedback-banner');
+            banner.classList.add('hidden');
+
+            // Render Options
+            const container = document.getElementById('options-container');
+            container.innerHTML = '';
+
+            const prefixes = ['A', 'B', 'C', 'D'];
+            const fingers = ['☝️ 1 Jari', '✌️ 2 Jari', '🤟 3 Jari', '🖖 4 Jari'];
+
+            qData.options.forEach((optText, idx) => {
+                const btn = document.createElement('button');
+                btn.id = `option-btn-${idx}`;
+                btn.setAttribute('data-idx', idx);
+                btn.onclick = () => selectOption(idx);
+                btn.className = `option-card relative p-3.5 sm:p-4 rounded-xl text-left bg-slate-900 border border-cyan-900/80 hover:border-cyan-400 hover:bg-slate-800/80 transition-all duration-200 flex items-center justify-between group shadow-lg cursor-pointer`;
+
+                btn.innerHTML = `
+                    <div class="flex items-center gap-3">
+                        <span class="w-8 h-8 rounded-lg bg-cyan-950 border border-cyan-500/40 text-cyan-400 font-orbitron font-bold flex items-center justify-center group-hover:bg-cyan-400 group-hover:text-black transition">
+                            ${prefixes[idx]}
+                        </span>
+                        <span class="text-xs sm:text-sm font-semibold text-gray-200 leading-snug">${optText}</span>
+                    </div>
+                    <span class="text-[9px] sm:text-[10px] font-orbitron text-gray-400 bg-slate-950 px-2 py-1 rounded border border-slate-800">
+                        ${fingers[idx]}
+                    </span>
+                `;
+                container.appendChild(btn);
+            });
+        }
+
+        function selectOption(selectedIdx) {
+            if (answered) return;
+            answered = true;
+
+            const qData = questions[currentQuestionIdx];
+            const isCorrect = selectedIdx === qData.correct;
+            const banner = document.getElementById('feedback-banner');
+            const feedbackText = document.getElementById('feedback-text');
+            const feedbackIcon = document.getElementById('feedback-icon');
+
+            // Highlight buttons
+            qData.options.forEach((_, idx) => {
+                const btn = document.getElementById(`option-btn-${idx}`);
+                btn.disabled = true;
+                if (idx === qData.correct) {
+                    btn.className = "option-card relative p-3.5 sm:p-4 rounded-xl text-left bg-emerald-950/90 border-2 border-emerald-400 text-white flex items-center justify-between shadow-lg glow-cyan";
+                } else if (idx === selectedIdx && !isCorrect) {
+                    btn.className = "option-card relative p-3.5 sm:p-4 rounded-xl text-left bg-rose-950/90 border-2 border-rose-500 text-white flex items-center justify-between shadow-lg";
+                }
+            });
+
+            if (isCorrect) {
+                score += 100;
+                document.getElementById('score-display').innerText = String(score).padStart(3, '0');
+                playSound('correct');
+
+                banner.className = "p-4 rounded-xl border border-emerald-500 bg-emerald-950/90 text-emerald-300 font-orbitron text-xs sm:text-sm flex flex-col sm:flex-row items-center justify-between gap-3 shadow-xl";
+                feedbackText.innerText = "TAHNIAH! JAWAPAN TEPAT & HARMONI!";
+                feedbackIcon.className = "fa-solid fa-circle-check text-emerald-400 text-2xl";
+                document.getElementById('mascot-dialogue').innerText = '"Sangat Hebat! Anda menguasai konsep nyanyian lagu pusingan ini!"';
+            } else {
+                health--;
+                updateHealthDisplay();
+                playSound('wrong');
+
+                banner.className = "p-4 rounded-xl border border-rose-500 bg-rose-950/90 text-rose-300 font-orbitron text-xs sm:text-sm flex flex-col sm:flex-row items-center justify-between gap-3 shadow-xl";
+                feedbackText.innerText = `TIDAK TEPAT! Jawapan betul: (${['A','B','C','D'][qData.correct]})`;
+                feedbackIcon.className = "fa-solid fa-triangle-exclamation text-rose-400 text-2xl";
+                document.getElementById('mascot-dialogue').innerText = '"Jangan putus asa! Sila fahami kunci utama lagu pusingan."';
+            }
+
+            banner.classList.remove('hidden');
+
+            if (health <= 0) {
+                setTimeout(showGameOver, 1400);
+            }
+        }
+
+        function updateHealthDisplay() {
+            const healthBar = document.getElementById('health-bar');
+            healthBar.innerHTML = '';
+            for (let i = 0; i < 3; i++) {
+                if (i < health) {
+                    healthBar.innerHTML += '<i class="fa-solid fa-bolt text-xs text-yellow-400"></i>';
+                } else {
+                    healthBar.innerHTML += '<i class="fa-solid fa-bolt text-xs text-gray-700"></i>';
+                }
+            }
+        }
+
+        function nextQuestion() {
+            currentQuestionIdx++;
+            if (currentQuestionIdx >= questions.length || health <= 0) {
+                showGameOver();
+            } else {
+                loadQuestion();
+            }
+        }
+
+        function showGameOver() {
+            playSound('victory');
+            const modal = document.getElementById('game-over-modal');
+            const title = document.getElementById('modal-title');
+            const subtitle = document.getElementById('modal-subtitle');
+            const accuracy = Math.round((score / (questions.length * 100)) * 100);
+
+            document.getElementById('modal-score').innerText = score;
+            document.getElementById('modal-accuracy').innerText = `${accuracy}%`;
+
+            if (health > 0 && accuracy >= 70) {
+                document.getElementById('modal-emoji').innerText = '🤖🏆';
+                title.innerText = 'MISI ROBOTIK SUKSES!';
+                subtitle.innerText = 'Tahniah! Anda pakar dalam Menyanyikan Lagu Pusingan!';
+            } else {
+                document.getElementById('modal-emoji').innerText = '⚙️⚠️';
+                title.innerText = 'MISI PERLU DIULANG';
+                subtitle.innerText = 'Sila ulang semula untuk memantapkan pemahaman lagu pusingan.';
+            }
+
+            modal.classList.remove('hidden');
+        }
+
+        function restartGame() {
+            currentQuestionIdx = 0;
+            score = 0;
+            health = 3;
+            document.getElementById('score-display').innerText = '000';
+            updateHealthDisplay();
+            document.getElementById('game-over-modal').classList.add('hidden');
+            loadQuestion();
+        }
+
+        /* ------------------------------------------------------------------
+           6. MEDIAPIPE HAND GESTURE DETECTION & WEBCAM
+        ------------------------------------------------------------------ */
+        function toggleWebcam() {
+            if (webcamActive) {
+                stopWebcam();
+            } else {
+                startWebcam();
+            }
+        }
+
+        async function startWebcam() {
+            const video = document.getElementById('webcam-video');
+            const placeholder = document.getElementById('cam-placeholder');
+            const statusText = document.getElementById('cam-status-text');
+            const indicator = document.getElementById('cam-indicator');
+            const btnText = document.getElementById('cam-btn-text');
+
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: "user" } 
+                });
+                video.srcObject = stream;
+                await video.play();
+
+                cameraStream = stream;
+                webcamActive = true;
+
+                placeholder.classList.add('hidden');
+                statusText.innerText = "WEBCAM AKTIF";
+                indicator.className = "w-2 h-2 rounded-full bg-emerald-400 animate-pulse";
+                btnText.innerText = "Tutup Webcam";
+                document.getElementById('gesture-badge').classList.remove('hidden');
+
+                initMediaPipe();
+            } catch (err) {
+                console.error("Gagal membuka webcam:", err);
+                alert("Tidak dapat mengakses webcam. Sila pastikan kebenaran kamera dibenarkan di dalam Google Sites / Pelayar Web.");
+            }
+        }
+
+        function stopWebcam() {
+            if (cameraStream) {
+                cameraStream.getTracks().forEach(track => track.stop());
+            }
+            webcamActive = false;
+
+            document.getElementById('cam-placeholder').classList.remove('hidden');
+            document.getElementById('cam-status-text').innerText = "MOD MANUAL";
+            document.getElementById('cam-indicator').className = "w-2 h-2 rounded-full bg-red-500";
+            document.getElementById('cam-btn-text').innerText = "Buka Webcam";
+            document.getElementById('gesture-badge').classList.add('hidden');
+            document.getElementById('virtual-cursor').classList.add('hidden');
+        }
+
+        function initMediaPipe() {
+            if (handsDetector) return;
+
+            const hands = new Hands({
+                locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+            });
+
+            hands.setOptions({
+                maxNumHands: 1,
+                modelComplexity: 1,
+                minDetectionConfidence: 0.6,
+                minTrackingConfidence: 0.6
+            });
+
+            hands.onResults(onHandResults);
+            handsDetector = hands;
+
+            // Camera frame capture loop
+            const video = document.getElementById('webcam-video');
+            async function processFrame() {
+                if (webcamActive && video.readyState >= 2) {
+                    await hands.send({ image: video });
+                }
+                if (webcamActive) {
+                    requestAnimationFrame(processFrame);
+                }
+            }
+            processFrame();
+        }
+
+        /* Process Landmark Data & Gesture Recognition */
+        function onHandResults(results) {
+            const canvas = document.getElementById('output-canvas');
+            const ctx = canvas.getContext('2d');
+            canvas.width = canvas.parentElement.clientWidth;
+            canvas.height = canvas.parentElement.clientHeight;
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            if (!results.multiHandLandmarks || results.multiHandLandmarks.length === 0) {
+                document.getElementById('virtual-cursor').classList.add('hidden');
+                document.getElementById('detected-count').innerText = "0";
+                resetHoverTimer();
+                return;
+            }
+
+            const landmarks = results.multiHandLandmarks[0];
+
+            // Draw Hand Skeleton
+            ctx.save();
+            ctx.strokeStyle = '#00f0ff';
+            ctx.fillStyle = '#ff007f';
+            ctx.lineWidth = 3;
+
+            landmarks.forEach((point) => {
+                const x = point.x * canvas.width;
+                const y = point.y * canvas.height;
+                ctx.beginPath();
+                ctx.arc(x, y, 4, 0, 2 * Math.PI);
+                ctx.fill();
+            });
+            ctx.restore();
+
+            // 1. Gesture Method A: Finger Counting (1, 2, 3, 4 fingers raised)
+            const fingerCount = countFingersUp(landmarks);
+            document.getElementById('detected-count').innerText = fingerCount;
+
+            const now = Date.now();
+            if (fingerCount >= 1 && fingerCount <= 4 && !answered && (now - lastGestureDetectTime > 1800)) {
+                selectOption(fingerCount - 1);
+                lastGestureDetectTime = now;
+            }
+
+            // 2. Gesture Method B: Hover Cursor with Index Fingertip (Landmark #8)
+            const indexTip = landmarks[8];
+            if (indexTip) {
+                // Mirrored coordinates for webcam canvas overlay
+                const cursorX = (1 - indexTip.x) * window.innerWidth;
+                const cursorY = indexTip.y * window.innerHeight;
+
+                const cursorEl = document.getElementById('virtual-cursor');
+                cursorEl.classList.remove('hidden');
+                cursorEl.style.left = `${cursorX}px`;
+                cursorEl.style.top = `${cursorY}px`;
+
+                handleHoverSelection(cursorX, cursorY);
+            }
+        }
+
+        // Count Extended Fingers
+        function countFingersUp(landmarks) {
+            let count = 0;
+
+            // Index finger
+            if (landmarks[8].y < landmarks[6].y) count++;
+            // Middle finger
+            if (landmarks[12].y < landmarks[10].y) count++;
+            // Ring finger
+            if (landmarks[16].y < landmarks[14].y) count++;
+            // Pinky finger
+            if (landmarks[20].y < landmarks[18].y) count++;
+
+            return count;
+        }
+
+        // Hover Over Buttons Logic
+        function handleHoverSelection(x, y) {
+            if (answered) return;
+
+            let hoveredAny = false;
+
+            for (let i = 0; i < 4; i++) {
+                const btn = document.getElementById(`option-btn-${i}`);
+                if (!btn) continue;
+
+                const rect = btn.getBoundingClientRect();
+                if (x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) {
+                    hoveredAny = true;
+                    if (hoveredOptionIdx !== i) {
+                        hoveredOptionIdx = i;
+                        hoverStartTime = Date.now();
+                        playSound('hover');
+                    } else {
+                        const elapsed = Date.now() - hoverStartTime;
+                        const progress = Math.min(elapsed / HOVER_DURATION, 1.0);
+                        
+                        const circle = document.querySelector('.progress-ring-circle');
+                        const circumference = 100.53;
+                        circle.style.strokeDashoffset = circumference - (progress * circumference);
+
+                        if (elapsed >= HOVER_DURATION) {
+                            selectOption(i);
+                            resetHoverTimer();
+                        }
+                    }
+                    break;
+                }
+            }
+
+            if (!hoveredAny) {
+                resetHoverTimer();
+            }
+        }
+
+        function resetHoverTimer() {
+            hoveredOptionIdx = -1;
+            hoverStartTime = 0;
+            const circle = document.querySelector('.progress-ring-circle');
+            if (circle) circle.style.strokeDashoffset = 100.53;
+        }
+
+        /* ------------------------------------------------------------------
+           7. INITIALIZATION ON LOAD
+        ------------------------------------------------------------------ */
+        window.onload = () => {
+            initVisualizer();
+            loadQuestion();
+        };
+    </script>
+</body>
+</html>
